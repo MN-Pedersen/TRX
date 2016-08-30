@@ -123,7 +123,9 @@ class total_scattering_dataset(Q=0, IQ=0, sigmaQ=0, detector_dist=35, energy=18,
         Returns
         -----
         dIQ : The differences curves obtained by subtracting the weigthed
-            average of reference from the total scattering curves
+              average of reference from the total scattering curves. it is a 
+              list of the different time delays so that dIQ[1] is all the
+              diffential curves for the second time delay
             
         Notes
         -----
@@ -131,38 +133,58 @@ class total_scattering_dataset(Q=0, IQ=0, sigmaQ=0, detector_dist=35, energy=18,
         memory consumption
         
         """
-        reference_index = np.array(self.list_delays) == self.reference
-        numbers_reference = np.linspace(0, len(self.list_delays), 
-                                        dtype=int)[reference_index]
-        number_blocks = np.floor(np.shape(self.IQ)[1]/len(self.list_delays))
-        
-        for num, delay in enumerate(self.list_delays):
-            
-            # produce array of the number of the frames
-            file_numbers = np.linspace(0, number_blocks, dtype=int)+num
-            
-            # figure out what data curves to use
-            try:
-                number_i = numbers_reference[numbers_reference < num][-1]
-            except IndexError: # there is no reference before in the list_delay
-                number_i = numbers_reference[numbers_reference > num][0]
-            
-            numbers_reference_before = np.linspace(0, number_blocks, 
-                                                       dtype=int)+number_i
+        if not self.scaled_flag:
+            raise AssertionError('Please scale the data first!')
                 
-            try:
-                number_k = numbers_reference[numbers_reference > num][0]
-            except IndexError: # there is no reference after in the list
-                               # use the frame from the next round instead
-                first_reference =  numbers_reference[0]
-                number_k = number_i+(len(self.list_delays)-number_i)+\
-                                                       first_reference
+        
+        # *** new approach - generate pseudo log file ***
+        number_blocks = np.floor(np.shape(self.IQ)[1]/len(self.list_delays))
+        log_file = np.tile(self.list_delays, number_blocks)
+        ekstra_measurements = np.shape(self.IQ)[1]-len(log_file)
+        log_file = np.concatenate((log_file, self.list_delays[:ekstra_measurements]))
+        file_numbers = np.linspace(0,np.shape(self.IQ)[1]-1, 
+                                   np.shape(self.IQ)[1], dtype=int)
+        
+        reference_index = np.array(log_file) == self.reference
+        numbers_reference = file_numbers[reference_index]
+        
+        
+        
+        dIQ = []
+        for num, delay in enumerate(self.unique_delays):
+            if delay == self.reference:
+                continue # handle reference data separately
+            # produce array of the number of the frames
+            index_data = delay == np.array(log_file)
+            curve_numbers = list(file_numbers[:,index_data]) 
+            
+            dIQ_delay = []
+            for index, num in enumerate(curve_numbers): 
+                # figure out what data curves to use
+                try:
+                    number_i = numbers_reference[numbers_reference < num][-1]
+                except IndexError: # there is no reference before in the list_delay
+                    number_i = numbers_reference[numbers_reference > num][0]
+                
+                try:
+                    number_j = numbers_reference[numbers_reference > num][0]
+                except IndexError: # there is no reference after in the list
+                    number_j = number_i
+                    
+                reference_before = self.IQ_raw[:, number_i]
+                reference_after = self.IQ_raw[:, number_j]
+                Reference = reference_before+(reference_after-reference_before)/\
+                            (number_j-number_i)*(num-number_i)                
+                
+                Curve = self.IQ_raw[:, num]
+                Curve = Curve-Reference
+                dIQ_delay.append(Curve)
+            dIQ.append(np.array(dIQ_delay).T)
+        
+        return dIQ
                                     
              
-            numbers_reference_after = np.linspace(0, number_blocks, 
-                                                   dtype=int)+number_k 
-            # fetch the data
-            #reference_before = self.IQ[number_i]
+
             
             
             
