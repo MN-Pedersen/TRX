@@ -15,7 +15,7 @@ import numpy as np
 
 #%%
 
-class total_scattering_dataset(Q=0, IQ=0, sigmaQ=0, detector_dist=35, energy=18, reference=None, list_delays=None):
+class total_scattering_dataset:
     """
     Class for storing time resolved X-ray scattering data sets
     
@@ -49,7 +49,7 @@ class total_scattering_dataset(Q=0, IQ=0, sigmaQ=0, detector_dist=35, energy=18,
     
     """
     
-    def __init__(self, Q, IQ, sigmaQ, detector_dist, reference, list_delays):
+    def __init__(self, Q=0, IQ=0, sigmaQ=0, detector_dist=35, energy=18, reference=None, list_delays=None):
         # the easy variables
         self.Q = Q
         self.detector_dist = detector_dist
