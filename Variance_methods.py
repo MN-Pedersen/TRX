@@ -227,18 +227,20 @@ class Raw2D_dataset:
     
     """
     def __init__(self, filename_path=None, datapath=None, mask_path=None, file_extension='.edf',
-                 sort=True):
+                 beam_center=[920,920], sort=True):
         self.file_path = filename_path
         self.datapath = datapath
         self.mask_path = mask_path
         self.file_extension = file_extension
+        self.beam_center = beam_center        
         self.sort = sort
         
         
     
-    def create_hdf5(self,  separator='\\', image_size=[1918,1918]):
+    def create_hdf5(self, separator='\\', image_size=[1918,1918]):
         self.files = os.listdir(self.datapath)
         self.mask = fabio.open(self.mask_path).data
+        self.beam
         
         loadtxt = []
         file_number = []
@@ -264,7 +266,24 @@ class Raw2D_dataset:
                     print('finished with %i frames in %0.2fmin' % (num,elapsed))
             
             
-       
+    def define_subset(self, coords=[25,75,25,75]):
+        with h5py.File(self.file_path) as file:
+            example = file['/Raw_2D'][:,:,0]
+            
+            plt.figure()
+            plt.subplot(121)
+            plt.imshow(example)
+            plt.colorbar()
+            
+            plt.subplot(122)
+            plt.imshow(example[coords[0]:coords[1],coords[2]:coords[3]])
+            plt.colorbar()
+            
+            if '/Raw_subset' in file:
+                del file['/Raw_subset']
+            
+            self.subset=file['/Raw_2D'][coords[0]:coords[1],coords[2]:coords[3],:]
+            file.create_dataset('/Raw_subset', data=self.subset, dtype=np.int16)
         
         
         
