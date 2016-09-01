@@ -13,7 +13,9 @@ import os
 import re
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-
+import h5py
+import fabio
+import timeit
 
 #%%
 
@@ -213,8 +215,56 @@ class Raw1D_dataset:
             plt.clim(vmin=np.min(self.differentials)*colorscale, 
                      vmax=np.max(self.differentials)*colorscale)
         plt.colorbar()
+        
+        
+#%%
+        
+        
+class Raw2D_dataset:
+    """
+    
+    
+    
+    """
+    def __init__(self, filename_path=None, datapath=None, mask_path=None, file_extension='.edf',
+                 sort=True):
+        self.file_path = filename_path
+        self.datapath = datapath
+        self.mask_path = mask_path
+        self.file_extension = file_extension
+        self.sort = sort
+        
+        
+    
+    def create_hdf5(self,  separator='\\', image_size=[1918,1918]):
+        self.files = os.listdir(self.datapath)
+        self.mask = fabio.open(self.mask_path).data
+        
+        loadtxt = []
+        file_number = []
+        for file in self.files:
+            if file.endswith(self.file_extension):
+                loadtxt.append(self.datapath+separator+file)
+                if self.sort:
+                    file_number.append(int(re.findall('\d{4}',file)[-1]))
+                    
+        if self.sort:
+            sort_index = np.argsort(file_number)
+            loadtxt = np.array(loadtxt)[sort_index]
 
-                            
+        with h5py.File(self.file_path, 'a') as file:
+            dset = file.create_dataset('Raw_2D',shape=(image_size[0], 
+                                    image_size[1], len(loadtxt)), dtype=np.int16) #, compression='gzip', fletcher32=True)
+            start_time = timeit.default_timer()
+            for num, full_path in enumerate(loadtxt):
+                image = fabio.open(full_path).data # through header away
+                dset[:,:,num] = image[1:image_size[0]+1, 1:image_size[0]+1]
+                if np.mod(num,25) == 0:
+                    elapsed = (timeit.default_timer() - start_time)/60
+                    print('finished with %i frames in %0.2fmin' % (num,elapsed))
+            
+            
+       
         
         
         
