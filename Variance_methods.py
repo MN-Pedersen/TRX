@@ -21,28 +21,78 @@ import timeit
 
 class Raw1D_dataset:
     """
+    Class for analysis of azimuthally averaged scattering curves intended for 
+    detector response characterisation. Please see the docstring for 
+    the different methods for details
+    
+    Arguments
+    -----    
+    datapath : The path the data which is to be analysed
+    
+    file_extension : The file extension for the. Default is '.chi'
+    
+    separator : The separator used for directories. Default is '\\' (windows),
+                use '/' for linux/mac.
+                
+    header_number : Number of lines to skip before reading the data. default is
+                    24.
+    
+    QIQ : list of indices for Q-vector and IQ-vector, respectively. Default is
+          [0, 1] which indicates first column is Q-vector and second column is 
+          IQ
+          
+    Sort : T/F indicating whether the data should be used based on the file 
+    number preceeding the file extension. Default is False
     
     
+    Methods
+    -----    
+    load_data : loads all ascii files in the data path with the specified
+                  file extension.
+     
+    sum_curves : Sums the intensity of the different curves. Can be used to
+                   indentify outliers from e.g. storage ring injection
+                   
+    zinger_removal : Removes zingers by either replacing them with median or
+                     excluding the entire curve
+                   
+    generate_subset : Method for producing a subset of the loaded data which
+                        can be used instead of the entire data set in subsequent
+                        methods
     
+    intensity_trends : Tool for detecting non-linearities between different
+                       Q-regions
+                       
+    svd_analysis : Implemtation of numpy's SVD
+    
+    cov_analysis : Method for analysing the covariance and correlation matrices
+                   of the data.
+    
+    Notes
+    -----
+    
+    No error handling yet
     
     """
-    def __init__(self, datapath=None, file_extension='.chi', header_number=24,
-                 sort=True):
+    def __init__(self, datapath=None, file_extension='.chi', separator='\\',
+                 header_number=24, QIQ=[0, 1], sort=False):
         self.datapath = datapath
         self.file_extension = file_extension
         self.header_number = header_number
+        self.separator = separator
+        self.QIQ = QIQ
         self.sort = sort        
         
         
-    def load_data(self, separator = '\\'):
+    def load_data(self):
         self.files = os.listdir(self.datapath)
         
         IQ = []
         file_number = []
         for file in self.files:
             if file.endswith(self.file_extension):
-                curve = np.genfromtxt(self.datapath+separator+file, skip_header=self.header_number)
-                IQ.append(curve[:,1])
+                curve = np.genfromtxt(self.datapath+self.separator+file, skip_header=self.header_number)
+                IQ.append(curve[:,self.QIQ [1]])
                 if self.sort:
                     file_number.append(int(re.findall('\d{4}',file)[-1]))
                     
@@ -51,11 +101,10 @@ class Raw1D_dataset:
             IQ = np.array(IQ)[sort_index,:]    
                 
                 
-        self.Q = curve[:,0]
+        self.Q = curve[:,self.QIQ[0]]
         self.IQ = np.array(IQ).T
         
-    
-    def sum_curves(self, clean=False, clean_thresshold=1e7, keep_tail=True,
+    def sum_curves(self, clean=False, clean_thresshold=1e6, keep_tail=True,
                    tail_intensity=5e4):
         self.summed_intensity = np.sum(self.IQ,axis=0)
         
@@ -68,6 +117,54 @@ class Raw1D_dataset:
             index_remove = self.summed_intensity < clean_thresshold
             self.IQ = self.IQ[:,~index_remove]
             self.summed_intensity = np.sum(self.IQ,axis=0)
+            
+    def zinger_removal(self, std_cutoff=5, rejected='median'):
+        if rejected is not 'median' or rejected is not 'exclude':
+            raise ValueError('Rejected only accepts "median" or "exclude" as input')
+        median = np.median(self.IQ, axis=1)
+        std = np.std(self.IQ, axis=1)
+        excluded = np.zeros(len(std), dtype=bool) # stays 0 if 'median is used'
+        
+        for num in range(np.shape(self.IQ)[1]):
+            test = self.IQ[:,num] > median + std_cutoff*std
+            
+            if np.sum(test) > 0:
+                excluded[num] = True
+                if rejected is 'median':
+                    self.IQ[:,num] = median[:,num]
+                    
+         if rejected is 'exclude':
+             self.IQ = self.IQ[~excluded]
+             
+        
+            
+    def generate_subset(self, bandwidth=1, use_region=True, region=[0,1],
+                            use_max_occ=False, intensity_region=[7,7.15]):
+             
+       frame_num = np.linspace(1,np.shape(self.IQ)[1],np.shape(self.IQ)[1])                   
+       if use_region:
+           self.subset = self.IQ[:, region[0]:region[1]]
+           self.frames = frame_num[region[0]:region[1]]
+                
+       if use_max_occ:
+           Q_index = (self.Q > intensity_region[0]) &  (self.Q < intensity_region[1]) 
+           IQ_region = np.sum(self.IQ[Q_index,:], axis=0)
+           hist, bin_edges = np.histogram(IQ_region, bins=100)
+           maximum_index = np.argmax(hist)
+           intensity = bin_edges[maximum_index] # not quite accurate
+           min_intensity = intensity*(1-bandwidth/100)
+           max_intensity = intensity*(1+bandwidth/100)
+           curve_idx = (IQ_region >= min_intensity) & (IQ_region <= max_intensity)
+           self.subset = self.IQ[:,curve_idx]
+           self.frames = frame_num[curve_idx]
+                
+       fig = plt.figure()
+       plt.plot(frame_num, np.sum(self.IQ, axis=0), 'ok')
+       plt.plot(self.frames, np.sum(self.subset, axis=0), 'or')
+            
+       fig = plt.figure()
+       plt.plot(self.Q, self.IQ, '-k')
+       plt.plot(self.Q, self.subset, '-r')
             
             
     def intensity_trends(self, tuples_list, produce_plot=True, use_subset=False):       
@@ -150,33 +247,7 @@ class Raw1D_dataset:
             
             
             
-    def generate_subset(self, bandwidth=1, use_region=True, region=[0,1],
-                            use_max_occ=False, intensity_region=[7,7.15]):
-             
-       frame_num = np.linspace(1,np.shape(self.IQ)[1],np.shape(self.IQ)[1])                   
-       if use_region:
-           self.subset = self.IQ[:, region[0]:region[1]]
-           self.frames = frame_num[region[0]:region[1]]
-                
-       if use_max_occ:
-           Q_index = (self.Q > intensity_region[0]) &  (self.Q < intensity_region[1]) 
-           IQ_region = np.sum(self.IQ[Q_index,:], axis=0)
-           hist, bin_edges = np.histogram(IQ_region, bins=100)
-           maximum_index = np.argmax(hist)
-           intensity = bin_edges[maximum_index] # not quite accurate
-           min_intensity = intensity*(1-bandwidth/100)
-           max_intensity = intensity*(1+bandwidth/100)
-           curve_idx = (IQ_region >= min_intensity) & (IQ_region <= max_intensity)
-           self.subset = self.IQ[:,curve_idx]
-           self.frames = frame_num[curve_idx]
-                
-       fig = plt.figure()
-       plt.plot(frame_num, np.sum(self.IQ, axis=0), 'ok')
-       plt.plot(self.frames, np.sum(self.subset, axis=0), 'or')
-            
-       fig = plt.figure()
-       plt.plot(self.Q, self.IQ, '-k')
-       plt.plot(self.Q, self.subset, '-r')
+
        
        
        
