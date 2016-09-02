@@ -191,11 +191,11 @@ class Raw1D_dataset:
 
         self.differentials = np.array([scaled_IQ[:,num]-scaled_IQ[:,num+1] for num in range(0,np.shape(data)[1],2)])
         
-        cov = np.cov(self.differentials.T)
-        corr = np.corrcoef(self.differentials.T)
+        self.cov = np.cov(self.differentials.T)
+        self.corr = np.corrcoef(self.differentials.T)
         
         fig = plt.figure()
-        trans_data = np.log10(np.abs(cov))
+        trans_data = np.log10(np.abs(self.cov))
         plt.imshow(trans_data)
         plt.title('log10 of absolute covariance')
         if scale_color:
@@ -203,10 +203,10 @@ class Raw1D_dataset:
         plt.colorbar()
         
         fig = plt.figure()
-        plt.imshow(corr)
+        plt.imshow(self.corr)
         plt.title('Correlation matrix')
         if scale_color:
-            plt.clim(vmin=np.min(corr)*colorscale, vmax=np.max(corr)*colorscale)
+            plt.clim(vmin=np.min(self.corr)*colorscale, vmax=np.max(self.corr)*colorscale)
         plt.colorbar()
         
         fig = plt.figure()
