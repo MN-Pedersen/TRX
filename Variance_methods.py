@@ -104,8 +104,8 @@ class Raw1D_dataset:
         self.Q = curve[:,self.QIQ[0]]
         self.IQ = np.array(IQ).T
         
-    def sum_curves(self, clean=False, clean_thresshold=1e6, keep_tail=True,
-                   tail_intensity=5e4):
+    def preprocess_curves(self, clean=False, clean_thresshold=1e6, keep_tail=True,
+                   tail_intensity=5e4, normalise=True, norm_range=[8,9]):
         self.summed_intensity = np.sum(self.IQ,axis=0)
         
         if keep_tail:
@@ -116,14 +116,23 @@ class Raw1D_dataset:
         if clean:
             index_remove = self.summed_intensity < clean_thresshold
             self.IQ = self.IQ[:,~index_remove]
+            self.IQ = self.IQ[:770]
+            self.Q = self.Q[:770]
             self.summed_intensity = np.sum(self.IQ,axis=0)
+        
+        if normalise:
+            Q_index = (self.Q >= norm_range[0]) & (self.Q <= norm_range[1]) 
+            self.IQ  = np.array([self.IQ[:,num]/np.trapz(self.IQ[Q_index,num], 
+                                x=self.Q[Q_index]) for num in range(np.shape(self.IQ)[1])])
+            self.IQ  = np.array(self.IQ).T
+        
             
     def zinger_removal(self, std_cutoff=5, rejected='median'):
-        if rejected is not 'median' or rejected is not 'exclude':
+        if rejected is not 'median' and rejected is not 'exclude':
             raise ValueError('Rejected only accepts "median" or "exclude" as input')
         median = np.median(self.IQ, axis=1)
         std = np.std(self.IQ, axis=1)
-        excluded = np.zeros(len(std), dtype=bool) # stays 0 if 'median is used'
+        excluded = np.zeros(np.shape(self.IQ)[1], dtype=bool) # stays 0 if 'median is used'
         
         for num in range(np.shape(self.IQ)[1]):
             test = self.IQ[:,num] > median + std_cutoff*std
@@ -131,10 +140,10 @@ class Raw1D_dataset:
             if np.sum(test) > 0:
                 excluded[num] = True
                 if rejected is 'median':
-                    self.IQ[:,num] = median[:,num]
+                    self.IQ[test,num] = median[test]
                     
-         if rejected is 'exclude':
-             self.IQ = self.IQ[~excluded]
+        if rejected is 'exclude':
+             self.IQ = self.IQ[:,~excluded]
              
         
             
@@ -202,45 +211,62 @@ class Raw1D_dataset:
             #plt.tight_layout()
     
 
-    def svd_analysis(self, norm_range=[8,9], num_components=4, curve_region=[0,1], 
-                    produce_plot=True, use_subset=False):
-                        
-        if use_subset:
+    def svd_analysis(self, num_components=4, produce_plot=True, 
+                     use_subset=False, Raw=True):
+         
+        if use_subset and Raw:
             data = self.subset
-        else:
-            data = self.IQ[:, curve_region[0]:curve_region[1]]
+        elif use_subset and not Raw:
+            data = np.array([self.subset[:,num]-self.subset[:,num+1] for num in range(0,np.shape(self.subset)[1]-2,2)])
+        elif not use_subset and Raw:
+            data = self.IQ
+        elif not use_subset and not Raw:
+            data =  np.array([self.IQ[:,num]-self.IQ[:,num+1] for num in range(0,np.shape(self.IQ)[1]-2,2)])
             
-        Q_index = (self.Q >= norm_range[0]) & (self.Q <= norm_range[1])
-        norm_curves = np.array([data[:,num]/np.trapz(data[Q_index,num], 
-                                x=self.Q[Q_index]) for num in range(np.shape(data)[1])])
         
-        norm_curves = np.array(norm_curves).T
-        self.U, self.s, self.V = np.linalg.svd(norm_curves)
+        self.U, self.s, self.V = np.linalg.svd(data)
         colors = [cm.jet(num/float(num_components),1) for num in range(num_components)]
         
         if produce_plot:
+            num_frames = np.linspace(1,len(self.V),len(self.V))
             fig = plt.figure()
-            plt.loglog(self.s, 'o')
+            axes = plt.subplot(111)
+            plt.title('Singular values')
+            plt.loglog(num_frames[num_components-1:770], self.s[num_components-1:770],'o')
+            for num in range(num_components):
+                plt.loglog(num_frames[num], self.s[num], 'o', color=colors[num], label = 'Comp %i' % int(num+1))
+            plotbox = axes.get_position()
+            plt.ylabel('Singular values')
+            plt.xlabel('Component')
+            axes.set_position([plotbox.x0, plotbox.y0, plotbox.width * 0.8, plotbox.height])
+            axes.legend(loc='upper left', bbox_to_anchor=(1, 1))
+                
         
             fig = plt.figure()
             axes = plt.subplot(111)
+            plt.title('Left singular vectors')            
             for num in range(num_components):
                 plt.plot(self.Q, np.tile(-num/3, len(self.Q)), '-k', lw=2)
-                plt.plot(self.Q, self.U[:,num]-num/3, color = colors[num], lw=2,
+                plt.plot(self.Q, self.U[:,num]-num/3, color = colors[num], lw=3,
                          label = 'Comp %i' % int(num+1) )
             plotbox = axes.get_position()
+            plt.ylabel('Normalized variance')
+            plt.xlabel('Q (1/A)')
             axes.set_position([plotbox.x0, plotbox.y0, plotbox.width * 0.8, plotbox.height])
             axes.legend(loc='upper left', bbox_to_anchor=(1, 1))
                 
             
-            num_frames = np.linspace(1,len(self.V),len(self.V))
+            
             fig = plt.figure()
             axes = plt.subplot(111)
+            plt.title('Right singular vectors')            
             for num in range(num_components):
                 plt.plot(num_frames, np.tile(-num/3, len(self.V)), '-k', lw=2)
-                plt.plot(num_frames, self.V[num,:]-num/3, color = colors[num], lw=2,
+                plt.plot(num_frames, self.V[num,:]-num/3, color = colors[num], lw=3,
                          label = 'Comp %i' % int(num+1) )
             plotbox = axes.get_position()
+            plt.ylabel('Weight')
+            plt.xlabel('Frame')
             axes.set_position([plotbox.x0, plotbox.y0, plotbox.width * 0.8, plotbox.height])
             axes.legend(loc='upper left', bbox_to_anchor=(1, 1))
             
@@ -358,7 +384,75 @@ class Raw2D_dataset:
         
         
         
-                
+#%% IMPLEMENT!!!
+
+###########################
+###########################
+###########################
+###########################
+###########################
+
+
+
+#%%
+
+data = C50k.subset
+Q = C50k.Q
+scaling =  np.linalg.lstsq(np.atleast_2d(data[:,-1]).T, data)
+scaled_IQ = data/scaling[0]
+
+cov = np.cov(scaled_IQ)
+corrcoef = np.corrcoef(scaled_IQ)
+
+fig = plt.figure(figsize=(14,10))
+trans_data = np.log10(np.abs(cov))
+plt.title('log10 of absolute Q-Covariance from total scattering curves\n30K counts data (representative)\nCurves have been scaled before comparison')
+plt.imshow(trans_data, extent=[min(Q),max(Q),max(Q),min(Q)])
+plt.xlabel('Q (1/A)')
+plt.ylabel('Q (1/A)')
+plt.colorbar()
+
+fit = plt.figure(figsize=(14,10))
+plt.title('Q-Correlation from total scattering curves\n30K counts data (representative)\nCurves have been scaled before comparison')
+plt.imshow(corrcoef, extent=[min(Q),max(Q),max(Q),min(Q)])
+plt.xlabel('Q (1/A)')
+plt.ylabel('Q (1/A)')
+plt.colorbar()
+
+
+#%%
+
+indices = [50,100,138,300,500]
+buffer = 20
+
+C30 = np.corrcoef(C60k.differentials.T)
+#C30 = corrcoef
+fig = plt.figure(figsize=(12,8))
+plt.title('Raw point spread function\nData from 30K counts')
+for index in indices:
+    
+    #plt.plot(corrcoef[index,:], label = 'Raw: Q=0.2f' % (Q[index]))
+
+    maximum = np.argmax(C30[index,:])
+    points = np.linspace(-buffer,buffer,2*buffer+1)
+    
+
+    ax=plt.subplot(211)
+    plt.title('Differential point spread functions\nData from 60K counts')
+    plt.plot(Q[maximum-buffer:maximum+buffer+1], C30[index, maximum-buffer:maximum+buffer+1], '-', label = 'Diff: Q=%0.2f' % (Q[index]))
+    plt.xlabel('Q (1/A)')
+    plt.ylabel('Correlation')
+    plotbox = ax.get_position()
+    ax.set_position([plotbox.x0, plotbox.y0+plotbox.height*0.03, plotbox.width, plotbox.height*0.97])     
+    
+    
+    ax = plt.subplot(212)
+    plt.plot(points,C30[index, maximum-buffer:maximum+buffer+1],'-o', label = 'Diff: Q=%0.2f' % (Q[index]))#, markersize=10)
+    plt.xlabel('Data point')
+    plt.ylabel('Correlation')
+    plotbox = ax.get_position()
+    ax.set_position([plotbox.x0, plotbox.y0, plotbox.width*0.96, plotbox.height])
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))                
                 
                 
                 
