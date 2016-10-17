@@ -15,7 +15,7 @@ class Debye:
     def __init__(self):
         pass
         #self.ZXYZ = ZXYZ
-        # dummy comment
+        # dummy comment2
         #self.q = q        
         
     def DebyeScat_fromZXYZ(self, ZXYZ, q):
