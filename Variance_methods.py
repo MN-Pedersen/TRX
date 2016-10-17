@@ -217,11 +217,11 @@ class Raw1D_dataset:
         if use_subset and Raw:
             data = self.subset
         elif use_subset and not Raw:
-            data = np.array([self.subset[:,num]-self.subset[:,num+1] for num in range(0,np.shape(self.subset)[1]-2,2)])
+            data = np.array([self.subset[:,num]-self.subset[:,num+1] for num in range(0,np.shape(self.subset)[1]-2,2)]).T
         elif not use_subset and Raw:
             data = self.IQ
         elif not use_subset and not Raw:
-            data =  np.array([self.IQ[:,num]-self.IQ[:,num+1] for num in range(0,np.shape(self.IQ)[1]-2,2)])
+            data =  np.array([self.IQ[:,num]-self.IQ[:,num+1] for num in range(0,np.shape(self.IQ)[1]-2,2)]).T
             
         
         self.U, self.s, self.V = np.linalg.svd(data)
@@ -232,7 +232,7 @@ class Raw1D_dataset:
             fig = plt.figure()
             axes = plt.subplot(111)
             plt.title('Singular values')
-            plt.loglog(num_frames[num_components-1:770], self.s[num_components-1:770],'o')
+            plt.loglog(num_frames[num_components-1:100], self.s[num_components-1:100],'o')
             for num in range(num_components):
                 plt.loglog(num_frames[num], self.s[num], 'o', color=colors[num], label = 'Comp %i' % int(num+1))
             plotbox = axes.get_position()
@@ -286,7 +286,7 @@ class Raw1D_dataset:
         scaling =  np.linalg.lstsq(np.atleast_2d(data[:,-1]).T, data)
         scaled_IQ = data/scaling[0]
 
-        self.differentials = np.array([scaled_IQ[:,num]-scaled_IQ[:,num+1] for num in range(0,np.shape(data)[1],2)])
+        self.differentials = np.array([scaled_IQ[:,num]-scaled_IQ[:,num+1] for num in range(0,np.shape(data)[1]-2,2)])
         
         self.cov = np.cov(self.differentials.T)
         self.corr = np.corrcoef(self.differentials.T)
@@ -312,6 +312,20 @@ class Raw1D_dataset:
             plt.clim(vmin=np.min(self.differentials)*colorscale, 
                      vmax=np.max(self.differentials)*colorscale)
         plt.colorbar()
+        
+        
+    def point_spread(self, Q_list=None, num_points=20):
+        indices = []
+        for Q in Q_list:
+            idx_all = self.Q == np.round(self.Q, 1)
+            length_idx = len(self.Q[idx_all])
+            index = np.linspace(0,self.Q-1,1)[idx_all]
+            index = index[int(length_idx)/2]
+            indices.append(index)
+            
+        data_points = np.linspace(1,num_points,1)
+        
+        
         
         
 #%%
@@ -381,6 +395,9 @@ class Raw2D_dataset:
             
             self.subset=file['/Raw_2D'][coords[0]:coords[1],coords[2]:coords[3],:]
             file.create_dataset('/Raw_subset', data=self.subset, dtype=np.int16)
+            
+            
+    
         
         
         
@@ -395,65 +412,65 @@ class Raw2D_dataset:
 
 
 #%%
+#
+#data = C50k.subset
+#Q = C50k.Q
+#scaling =  np.linalg.lstsq(np.atleast_2d(data[:,-1]).T, data)
+#scaled_IQ = data/scaling[0]
 
-data = C50k.subset
-Q = C50k.Q
-scaling =  np.linalg.lstsq(np.atleast_2d(data[:,-1]).T, data)
-scaled_IQ = data/scaling[0]
+#cov = np.cov(scaled_IQ)
+#corrcoef = np.corrcoef(scaled_IQ)
 
-cov = np.cov(scaled_IQ)
-corrcoef = np.corrcoef(scaled_IQ)
+#fig = plt.figure(figsize=(14,10))
+#trans_data = np.log10(np.abs(cov))
+#plt.title('log10 of absolute Q-Covariance from total scattering curves\n30K counts data (representative)\nCurves have been scaled before comparison')
+#plt.imshow(trans_data, extent=[min(Q),max(Q),max(Q),min(Q)])
+#plt.xlabel('Q (1/A)')
+#plt.ylabel('Q (1/A)')
+#plt.colorbar()
 
-fig = plt.figure(figsize=(14,10))
-trans_data = np.log10(np.abs(cov))
-plt.title('log10 of absolute Q-Covariance from total scattering curves\n30K counts data (representative)\nCurves have been scaled before comparison')
-plt.imshow(trans_data, extent=[min(Q),max(Q),max(Q),min(Q)])
-plt.xlabel('Q (1/A)')
-plt.ylabel('Q (1/A)')
-plt.colorbar()
-
-fit = plt.figure(figsize=(14,10))
-plt.title('Q-Correlation from total scattering curves\n30K counts data (representative)\nCurves have been scaled before comparison')
-plt.imshow(corrcoef, extent=[min(Q),max(Q),max(Q),min(Q)])
-plt.xlabel('Q (1/A)')
-plt.ylabel('Q (1/A)')
-plt.colorbar()
+#fit = plt.figure(figsize=(14,10))
+#plt.title('Q-Correlation from total scattering curves\n30K counts data (representative)\nCurves have been scaled before comparison')
+#plt.imshow(corrcoef, extent=[min(Q),max(Q),max(Q),min(Q)])
+#plt.xlabel('Q (1/A)')
+#plt.ylabel('Q (1/A)')
+#plt.colorbar()
 
 
 #%%
 
-indices = [50,100,138,300,500]
-buffer = 20
+#indices = [50,100,138,300,500]
+#buffer = 20
 
-C30 = np.corrcoef(C60k.differentials.T)
+#C30 = np.corrcoef(C60k.differentials.T)
 #C30 = corrcoef
-fig = plt.figure(figsize=(12,8))
-plt.title('Raw point spread function\nData from 30K counts')
-for index in indices:
+#fig = plt.figure(figsize=(12,8))
+#plt.title('Raw point spread function\nData from 30K counts')
+#for index in indices:
     
     #plt.plot(corrcoef[index,:], label = 'Raw: Q=0.2f' % (Q[index]))
 
-    maximum = np.argmax(C30[index,:])
-    points = np.linspace(-buffer,buffer,2*buffer+1)
+#    maximum = np.argmax(C30[index,:])
+#    points = np.linspace(-buffer,buffer,2*buffer+1)
     
 
-    ax=plt.subplot(211)
-    plt.title('Differential point spread functions\nData from 60K counts')
-    plt.plot(Q[maximum-buffer:maximum+buffer+1], C30[index, maximum-buffer:maximum+buffer+1], '-', label = 'Diff: Q=%0.2f' % (Q[index]))
-    plt.xlabel('Q (1/A)')
-    plt.ylabel('Correlation')
-    plotbox = ax.get_position()
-    ax.set_position([plotbox.x0, plotbox.y0+plotbox.height*0.03, plotbox.width, plotbox.height*0.97])     
+#    ax=plt.subplot(211)
+#    plt.title('Differential point spread functions\nData from 60K counts')
+#    plt.plot(Q[maximum-buffer:maximum+buffer+1], C30[index, maximum-buffer:maximum+buffer+1], '-', label = 'Diff: Q=%0.2f' % (Q[index]))
+#    plt.xlabel('Q (1/A)')
+#    plt.ylabel('Correlation')
+#    plotbox = ax.get_position()
+#    ax.set_position([plotbox.x0, plotbox.y0+plotbox.height*0.03, plotbox.width, plotbox.height*0.97])     
     
     
-    ax = plt.subplot(212)
-    plt.plot(points,C30[index, maximum-buffer:maximum+buffer+1],'-o', label = 'Diff: Q=%0.2f' % (Q[index]))#, markersize=10)
-    plt.xlabel('Data point')
-    plt.ylabel('Correlation')
-    plotbox = ax.get_position()
-    ax.set_position([plotbox.x0, plotbox.y0, plotbox.width*0.96, plotbox.height])
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))                
-                
+#    ax = plt.subplot(212)
+#    plt.plot(points,C30[index, maximum-buffer:maximum+buffer+1],'-o', label = 'Diff: Q=%0.2f' % (Q[index]))#, markersize=10)
+#    plt.xlabel('Data point')
+#    plt.ylabel('Correlation')
+#    plotbox = ax.get_position()
+#    ax.set_position([plotbox.x0, plotbox.y0, plotbox.width*0.96, plotbox.height])
+#    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))                
+#                
                 
                 
 
